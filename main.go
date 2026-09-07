@@ -1,4 +1,4 @@
-package main
+package vectorballs
 
 import (
 	"bytes"
@@ -1066,17 +1066,4 @@ func (g *Game) Cleanup() {
 	if g.ymPlayer != nil {
 		g.ymPlayer.Close()
 	}
-}
-
-func main() {
-	ebiten.SetWindowSize(screenWidth, screenHeight)
-	ebiten.SetWindowTitle("Red Sector Vectorballs Demo by TLB (ported in golang by bilizir from DMA)")
-
-	game := NewGame()
-
-	if err := ebiten.RunGame(game); err != nil {
-		log.Fatal(err)
-	}
-
-	game.Cleanup()
 }
