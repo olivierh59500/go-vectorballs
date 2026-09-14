@@ -10,6 +10,7 @@ import (
 func main() {
 	ebiten.SetWindowSize(640, 480)
 	ebiten.SetWindowTitle("Red Sector Vectorballs Demo by TLB (ported in golang by bilizir from DMA)")
+	ebiten.SetScreenClearedEveryFrame(false)
 
 	game := vectorballs.NewGame()
 	defer game.Cleanup()

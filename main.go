@@ -2,6 +2,7 @@ package vectorballs
 
 import (
 	"bytes"
+	"cmp"
 	_ "embed"
 	"fmt"
 	"image"
@@ -10,7 +11,8 @@ import (
 	"io"
 	"log"
 	"math"
-	"sort"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -25,6 +27,9 @@ const (
 
 	// Demo timings (60 fps web vs 25 fps Atari ST)
 	frameRateConversion = 2.4
+
+	// Android and most current desktop audio devices use 48 kHz natively.
+	audioSampleRate = 48_000
 )
 
 // Embedded assets
@@ -35,6 +40,14 @@ var (
 	textData []byte
 	//go:embed assets/Mindbomb.ym
 	musicData []byte
+
+	sinusPhaseSin, sinusPhaseCos = func() ([15]float64, [15]float64) {
+		var sin, cos [15]float64
+		for i := range sin {
+			sin[i], cos[i] = math.Sincos(float64(i) * math.Pi / 10)
+		}
+		return sin, cos
+	}()
 )
 
 // Vector3 represents a 3D point
@@ -45,10 +58,35 @@ type Vector3 struct {
 
 // Point3D represents a transformed 3D point with depth
 type Point3D struct {
-	Pos   Vector3
 	Depth float64
 	X2D   float64
 	Y2D   float64
+	Img   int
+}
+
+type matrix3 [9]float64
+
+func newRotationMatrix(rotation Vector3, scale float64) matrix3 {
+	sinX, cosX := math.Sincos(rotation.X)
+	sinY, cosY := math.Sincos(rotation.Y)
+	sinZ, cosZ := math.Sincos(rotation.Z)
+	return matrix3{
+		cosY * cosZ * scale,
+		(sinX*sinY*cosZ - cosX*sinZ) * scale,
+		(cosX*sinY*cosZ + sinX*sinZ) * scale,
+		cosY * sinZ * scale,
+		(sinX*sinY*sinZ + cosX*cosZ) * scale,
+		(cosX*sinY*sinZ - sinX*cosZ) * scale,
+		-sinY * scale,
+		sinX * cosY * scale,
+		cosX * cosY * scale,
+	}
+}
+
+func (m matrix3) apply(point Vector3) (x, y, z float64) {
+	return point.X*m[0] + point.Y*m[1] + point.Z*m[2],
+		point.X*m[3] + point.Y*m[4] + point.Z*m[5],
+		point.X*m[6] + point.Y*m[7] + point.Z*m[8]
 }
 
 // Shape represents a 3D shape made of points
@@ -64,7 +102,7 @@ type ShapeManager struct {
 // NewShapeManager creates and initializes all shapes
 func NewShapeManager() *ShapeManager {
 	sm := &ShapeManager{
-		shapes: make(map[string]*Shape),
+		shapes: make(map[string]*Shape, 12),
 	}
 	sm.initShapes()
 	return sm
@@ -84,15 +122,13 @@ func parseShape(data string, defaultBall int) *Shape {
 			continue
 		}
 
-		var x, y, z float64
-		var img int = defaultBall
-
-		fmt.Sscanf(coords[0], "%f", &x)
-		fmt.Sscanf(coords[1], "%f", &y)
-		fmt.Sscanf(coords[2], "%f", &z)
+		x, _ := strconv.ParseFloat(coords[0], 64)
+		y, _ := strconv.ParseFloat(coords[1], 64)
+		z, _ := strconv.ParseFloat(coords[2], 64)
+		img := defaultBall
 
 		if len(coords) >= 4 {
-			fmt.Sscanf(coords[3], "%d", &img)
+			img, _ = strconv.Atoi(coords[3])
 		}
 
 		points = append(points, Vector3{X: x * scaleFactor, Y: y * scaleFactor, Z: z * scaleFactor, Img: img})
@@ -143,14 +179,13 @@ func (sm *ShapeManager) GetCopy(name string) *Shape {
 
 // YMPlayer wraps the YM player for use with Ebiten's audio system
 type YMPlayer struct {
-	player       *stsound.StSound
-	sampleRate   int
-	buffer       []int16
-	mutex        sync.Mutex
-	position     int64
-	totalSamples int64
-	loop         bool
-	volume       float64
+	player     *stsound.StSound
+	sampleRate int
+	buffer     []int16
+	mutex      sync.Mutex
+	position   int64 // PCM byte offset
+	totalBytes int64
+	loop       bool
 }
 
 // NewYMPlayer creates a new YM player instance
@@ -168,12 +203,11 @@ func NewYMPlayer(data []byte, sampleRate int, loop bool) (*YMPlayer, error) {
 	totalSamples := int64(info.MusicTimeInMs) * int64(sampleRate) / 1000
 
 	return &YMPlayer{
-		player:       player,
-		sampleRate:   sampleRate,
-		buffer:       make([]int16, 4096),
-		totalSamples: totalSamples,
-		loop:         loop,
-		volume:       1.0,
+		player:     player,
+		sampleRate: sampleRate,
+		buffer:     make([]int16, 4096),
+		totalBytes: totalSamples * 4,
+		loop:       loop,
 	}, nil
 }
 
@@ -182,48 +216,36 @@ func (y *YMPlayer) Read(p []byte) (n int, err error) {
 	y.mutex.Lock()
 	defer y.mutex.Unlock()
 
-	samplesNeeded := len(p) / 4
-	outBuffer := make([]int16, samplesNeeded*2)
+	// Each frame is one signed 16-bit sample duplicated to two channels.
+	byteCount := len(p) &^ 3
+	samplesNeeded := byteCount / 4
 
 	processed := 0
 	for processed < samplesNeeded {
-		chunkSize := samplesNeeded - processed
-		if chunkSize > len(y.buffer) {
-			chunkSize = len(y.buffer)
-		}
+		chunkSize := min(samplesNeeded-processed, len(y.buffer))
 
 		if !y.player.Compute(y.buffer[:chunkSize], chunkSize) {
 			if !y.loop {
-				for i := processed * 2; i < len(outBuffer); i++ {
-					outBuffer[i] = 0
-				}
-				err = io.EOF
-				break
+				clear(p[processed*4 : byteCount])
+				y.position = y.totalBytes
+				return byteCount, io.EOF
 			}
 		}
 
 		for i := 0; i < chunkSize; i++ {
-			sample := int16(float64(y.buffer[i]) * y.volume)
-			outBuffer[(processed+i)*2] = sample
-			outBuffer[(processed+i)*2+1] = sample
+			sample := y.buffer[i]
+			offset := (processed + i) * 4
+			p[offset] = byte(sample)
+			p[offset+1] = byte(sample >> 8)
+			p[offset+2] = byte(sample)
+			p[offset+3] = byte(sample >> 8)
 		}
 
 		processed += chunkSize
-		y.position += int64(chunkSize)
+		y.position += int64(chunkSize * 4)
 	}
 
-	buf := make([]byte, 0, len(outBuffer)*2)
-	for _, sample := range outBuffer {
-		buf = append(buf, byte(sample), byte(sample>>8))
-	}
-
-	copy(p, buf)
-	n = len(buf)
-	if n > len(p) {
-		n = len(p)
-	}
-
-	return n, err
+	return byteCount, nil
 }
 
 // Seek implements io.Seeker
@@ -238,7 +260,7 @@ func (y *YMPlayer) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekCurrent:
 		newPos = y.position + offset
 	case io.SeekEnd:
-		newPos = y.totalSamples + offset
+		newPos = y.totalBytes + offset
 	default:
 		return 0, fmt.Errorf("invalid whence: %d", whence)
 	}
@@ -246,10 +268,12 @@ func (y *YMPlayer) Seek(offset int64, whence int) (int64, error) {
 	if newPos < 0 {
 		newPos = 0
 	}
-	if newPos > y.totalSamples {
-		newPos = y.totalSamples
+	if newPos > y.totalBytes {
+		newPos = y.totalBytes
 	}
+	newPos &^= 3
 
+	y.player.Seek(uint32(newPos / 4 * 1000 / int64(y.sampleRate)))
 	y.position = newPos
 	return newPos, nil
 }
@@ -268,7 +292,7 @@ func (y *YMPlayer) Close() error {
 
 // Length returns total length
 func (y *YMPlayer) Length() int64 {
-	return y.totalSamples
+	return y.totalBytes
 }
 
 // Animation interface
@@ -283,18 +307,17 @@ type Sinus2D struct {
 }
 
 func (s *Sinus2D) Run(points []Vector3, frameCount int) {
-	a := s.ctr
+	amplitude := 200 * math.Sin(s.ctrAmp)
+	sinCtr, cosCtr := math.Sincos(s.ctr)
 	i := 0
 	for y := 0; y < 8; y++ {
-		b := a
 		for x := 0; x < 8; x++ {
 			if i < len(points) {
-				points[i].Z = 200 * math.Sin(s.ctrAmp) * math.Cos(b)
+				phase := x + y
+				points[i].Z = amplitude * (cosCtr*sinusPhaseCos[phase] - sinCtr*sinusPhaseSin[phase])
 			}
 			i++
-			b += math.Pi / 10
 		}
-		a += math.Pi / 10
 	}
 	s.ctr += math.Pi / 55
 	s.ctrAmp += math.Pi / 60
@@ -371,11 +394,12 @@ func (y *YRotate) Run(points []Vector3, frameCount int) {
 }
 
 // GetPosition returns the new position for YRotate animation
-func (y *YRotate) GetPosition() *Vector3 {
-	return &Vector3{
-		X: y.ratio * 100 * math.Cos(y.ctr),
+func (y *YRotate) GetPosition() Vector3 {
+	sinCtr, cosCtr := math.Sincos(y.ctr)
+	return Vector3{
+		X: y.ratio * 100 * cosCtr,
 		Y: 0,
-		Z: 850 + y.ratio*100*math.Sin(y.ctr),
+		Z: 850 + y.ratio*100*sinCtr,
 	}
 }
 
@@ -390,12 +414,13 @@ func (r *Rotors) Run(points []Vector3, frameCount int) {
 	}
 
 	// DON'T apply scaleFactor here - the points are already scaled from parseShape
-	radii := []float64{80, 150, 210, 160}
+	radii := [...]float64{80, 150, 210, 160}
 	offset := 100.0
+	sinCtr, cosCtr := math.Sincos(r.ctr)
 
 	for i, radius := range radii {
-		x := radius * math.Sin(r.ctr)
-		z := radius * math.Cos(r.ctr)
+		x := radius * sinCtr
+		z := radius * cosCtr
 		if i*2 < len(points) {
 			points[i*2].X = x
 			// DON'T touch Y - it's already set correctly from the shape
@@ -418,7 +443,7 @@ type Bounce struct {
 }
 
 func NewBounce() *Bounce {
-	curve := []float64{}
+	curve := make([]float64, 0, 540)
 	rad := 1200.0
 	off := 210.0
 
@@ -482,15 +507,18 @@ type Action struct {
 // Game represents the main demo state
 type Game struct {
 	// Images
-	ballsImg *ebiten.Image
-	textImg  *ebiten.Image
+	ballsSource image.Image
+	ballsAtlas  *ebiten.Image
+	textImg     *ebiten.Image
+	textRows    []*ebiten.Image
+	whiteImage  *ebiten.Image
 
 	// Ball sprites (extracted from AllBalls.png)
 	balls []*ebiten.Image
 
 	// Canvases
 	playgroundCanvas *ebiten.Image
-	mainCanvas       *ebiten.Image
+	reflectionSource *ebiten.Image
 
 	// 3D state
 	shapeManager *ShapeManager
@@ -500,6 +528,7 @@ type Game struct {
 	rotSpeed     Vector3
 	trSpeed      Vector3
 	zoomFactor   float64
+	transformed  []Point3D
 
 	// Animation
 	animations []Animation
@@ -519,13 +548,13 @@ type Game struct {
 	currentText int
 
 	// Projection
-	fov      float64
-	centerX  float64
-	centerY  float64
-	distance float64
+	fov     float64
+	centerX float64
+	centerY float64
 
 	// Initialization
 	ballsExtracted bool
+	dirty          bool
 }
 
 // NewGame creates a new game instance
@@ -536,8 +565,9 @@ func NewGame() *Game {
 		fov:          600 + 850,
 		centerX:      320,
 		centerY:      193,
-		distance:     1600,
 		position:     Vector3{X: 0, Y: 0, Z: 850, Img: 0},
+		transformed:  make([]Point3D, 0, 64),
+		dirty:        true,
 	}
 
 	// Load images
@@ -545,7 +575,9 @@ func NewGame() *Game {
 
 	// Create canvases
 	g.playgroundCanvas = ebiten.NewImage(640, 386)
-	g.mainCanvas = ebiten.NewImage(640, 480)
+	g.reflectionSource = g.playgroundCanvas.SubImage(image.Rect(0, 288, 640, 368)).(*ebiten.Image)
+	g.whiteImage = ebiten.NewImage(1, 1)
+	g.whiteImage.Fill(color.White)
 
 	// Initialize actions timeline
 	g.initActions()
@@ -569,7 +601,7 @@ func (g *Game) loadImages() {
 	if err != nil {
 		log.Printf("Failed to load balls image: %v", err)
 	} else {
-		g.ballsImg = ebiten.NewImageFromImage(img)
+		g.ballsSource = img
 	}
 
 	// Load text image
@@ -578,12 +610,16 @@ func (g *Game) loadImages() {
 		log.Printf("Failed to load text image: %v", err)
 	} else {
 		g.textImg = ebiten.NewImageFromImage(img)
+		for y := 0; y+14 <= img.Bounds().Dy(); y += 14 {
+			row := g.textImg.SubImage(image.Rect(0, y, 640, y+14)).(*ebiten.Image)
+			g.textRows = append(g.textRows, row)
+		}
 	}
 }
 
 // extractBalls creates all ball sprite variations
 func (g *Game) extractBalls() {
-	if g.ballsImg == nil {
+	if g.ballsSource == nil {
 		return
 	}
 
@@ -606,71 +642,81 @@ func (g *Game) extractBalls() {
 		{{36, 108, 0, 255}, {72, 144, 0, 255}, {108, 180, 0, 255}, {144, 216, 0, 255}, {180, 252, 0, 255}},
 	}
 
-	sizes := []int{12, 16, 20, 24, 28, 32, 54}
-	g.balls = make([]*ebiten.Image, 0)
+	sizes := [...]int{12, 16, 20, 24, 28, 32, 54}
+	atlasWidth := 0
+	for _, size := range sizes {
+		atlasWidth += size
+	}
+	const rowHeight = 54
+	atlas := image.NewRGBA(image.Rect(0, 0, atlasWidth, (len(palettes)+1)*rowHeight))
 
-	y := 0
-	for _, pal := range palettes {
-		y = 0
+	for paletteIndex, palette := range palettes {
+		sourceY := 0
+		destinationX := 0
 		for _, size := range sizes {
-			// Create ball image for this size and palette
-			ballImg := ebiten.NewImage(size, size)
-			opts := &ebiten.DrawImageOptions{}
-			src := g.ballsImg.SubImage(image.Rect(0, y, size, y+size)).(*ebiten.Image)
-
-			// Get source pixels and recolor
-			srcImg := ebiten.NewImageFromImage(src)
-			ballImg.DrawImage(g.recolorBall(srcImg, size, pal), opts)
-
-			g.balls = append(g.balls, ballImg)
-			y += size
+			sourceRect := image.Rect(0, sourceY, size, sourceY+size)
+			destination := image.Pt(destinationX, paletteIndex*rowHeight)
+			recolorBall(atlas, destination, g.ballsSource, sourceRect, palette)
+			sourceY += size
+			destinationX += size
 		}
-		// Add the last ball again (as in original code)
-		g.balls = append(g.balls, g.balls[len(g.balls)-1])
 	}
 
-	// Add checked ball at the end
-	checkedImg := ebiten.NewImage(54, 54)
-	src := g.ballsImg.SubImage(image.Rect(0, 186, 54, 240)).(*ebiten.Image)
-	checkedImg.DrawImage(src, &ebiten.DrawImageOptions{})
-	g.balls = append(g.balls, checkedImg)
+	checkedSource := image.Rect(0, 186, 54, 240)
+	checkedDestination := image.Pt(0, len(palettes)*rowHeight)
+	copyImage(atlas, checkedDestination, g.ballsSource, checkedSource)
+
+	g.ballsAtlas = ebiten.NewImageFromImage(atlas)
+	g.balls = make([]*ebiten.Image, 0, len(palettes)*(len(sizes)+1)+1)
+	for paletteIndex := range palettes {
+		x := 0
+		for _, size := range sizes {
+			rect := image.Rect(x, paletteIndex*rowHeight, x+size, paletteIndex*rowHeight+size)
+			g.balls = append(g.balls, g.ballsAtlas.SubImage(rect).(*ebiten.Image))
+			x += size
+		}
+		// The source demo repeats the last ball of each palette.
+		g.balls = append(g.balls, g.balls[len(g.balls)-1])
+	}
+	checkedRect := image.Rect(0, len(palettes)*rowHeight, 54, (len(palettes)+1)*rowHeight)
+	g.balls = append(g.balls, g.ballsAtlas.SubImage(checkedRect).(*ebiten.Image))
+	g.ballsSource = nil
 }
 
-// recolorBall recolors a ball sprite with the given palette
-func (g *Game) recolorBall(src *ebiten.Image, size int, pal []color.RGBA) *ebiten.Image {
-	bounds := src.Bounds()
-	w, h := bounds.Dx(), bounds.Dy()
-
-	// Create RGBA image to manipulate pixels
-	rgba := image.NewRGBA(image.Rect(0, 0, w, h))
-
-	// Read pixels from source
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			c := src.At(x, y)
+// recolorBall writes a recolored sprite into a CPU-side atlas. Keeping this
+// work off ebiten.Image avoids synchronous GPU readbacks during startup.
+func recolorBall(dst *image.RGBA, destination image.Point, src image.Image, source image.Rectangle, palette []color.RGBA) {
+	for y := 0; y < source.Dy(); y++ {
+		for x := 0; x < source.Dx(); x++ {
+			c := src.At(source.Min.X+x, source.Min.Y+y)
 			r, _, _, a := c.RGBA()
 			if a > 0 {
-				// Get palette index from red channel
 				redVal := uint8(r >> 8)
-				indx := int(redVal>>5) - 3
-				if indx >= 0 && indx < len(pal) {
-					rgba.Set(x, y, pal[indx])
+				index := int(redVal>>5) - 3
+				if index >= 0 && index < len(palette) {
+					dst.Set(destination.X+x, destination.Y+y, palette[index])
 				} else {
-					rgba.Set(x, y, c)
+					dst.Set(destination.X+x, destination.Y+y, c)
 				}
 			}
 		}
 	}
+}
 
-	return ebiten.NewImageFromImage(rgba)
+func copyImage(dst *image.RGBA, destination image.Point, src image.Image, source image.Rectangle) {
+	for y := 0; y < source.Dy(); y++ {
+		for x := 0; x < source.Dx(); x++ {
+			dst.Set(destination.X+x, destination.Y+y, src.At(source.Min.X+x, source.Min.Y+y))
+		}
+	}
 }
 
 // initAudio initializes the audio system with YM music
 func (g *Game) initAudio() {
-	g.audioContext = audio.NewContext(44100)
+	g.audioContext = audio.NewContext(audioSampleRate)
 
 	var err error
-	g.ymPlayer, err = NewYMPlayer(musicData, 44100, true)
+	g.ymPlayer, err = NewYMPlayer(musicData, audioSampleRate, true)
 	if err != nil {
 		log.Printf("Failed to create YM player: %v", err)
 		return
@@ -732,7 +778,11 @@ func (g *Game) initActions() {
 		{Rot: &Vector3{X: toRadSpeed, Y: 0, Z: toRadSpeed}, Frames: 20, hasRot: true},
 		{InitFunc: func(g *Game) { g.animations = append(g.animations, NewYRotate()) }, Rot: &Vector3{X: 0, Y: math.Pi * toRadSpeed, Z: 0}, Frames: 240, hasRot: true},
 		{Rot: &Vector3{X: math.Pi * toRadSpeed, Y: math.Pi * toRadSpeed, Z: 0}, Frames: 220, TextIndex: 12, hasRot: true, hasText: true},
-		{InitFunc: func(g *Game) { if len(g.animations) > 0 { g.animations = g.animations[:len(g.animations)-1] } }, Rot: &Vector3{X: 0, Y: 0, Z: 0}, Frames: 20, hasRot: true},
+		{InitFunc: func(g *Game) {
+			if len(g.animations) > 0 {
+				g.animations = g.animations[:len(g.animations)-1]
+			}
+		}, Rot: &Vector3{X: 0, Y: 0, Z: 0}, Frames: 20, hasRot: true},
 		{Tr: &Vector3{X: 0, Y: 3, Z: 0}, Frames: 45, hasTr: true},
 
 		// ANIMAL - IMPORTANT: anim:[] clears the Rotors animation from helicopter!
@@ -824,7 +874,7 @@ func (g *Game) nextAction() {
 	// When anim is NOT specified (hasAnimTypes=false), keep the previous animations!
 	// When anim IS specified but empty (hasAnimTypes=true, len=0), clear animations!
 	if action.hasAnimTypes {
-		g.animations = []Animation{}
+		g.animations = g.animations[:0]
 		for _, animType := range action.AnimTypes {
 			switch animType {
 			case "Sinus2D":
@@ -836,16 +886,16 @@ func (g *Game) nextAction() {
 			case "Bounce":
 				g.animations = append(g.animations, NewBounce())
 			case "MorphingSphere":
-				target := g.shapeManager.GetCopy("sphere")
+				target := g.shapeManager.shapes["sphere"]
 				g.animations = append(g.animations, NewMorphingTo(g.currentShape.Points, target.Points, int(45*frameRateConversion)))
 			case "MorphingTube":
-				target := g.shapeManager.GetCopy("tube")
+				target := g.shapeManager.shapes["tube"]
 				g.animations = append(g.animations, NewMorphingTo(g.currentShape.Points, target.Points, int(45*frameRateConversion)))
 			case "MorphingSquare":
-				target := g.shapeManager.GetCopy("square")
+				target := g.shapeManager.shapes["square"]
 				g.animations = append(g.animations, NewMorphingTo(g.currentShape.Points, target.Points, int(60*frameRateConversion)))
 			case "MorphingSpaceCube":
-				target := g.shapeManager.GetCopy("spacecube")
+				target := g.shapeManager.shapes["spacecube"]
 				g.animations = append(g.animations, NewMorphingTo(g.currentShape.Points, target.Points, int(45*frameRateConversion)))
 			}
 		}
@@ -858,6 +908,8 @@ func (g *Game) nextAction() {
 
 // Update updates the game state
 func (g *Game) Update() error {
+	g.dirty = true
+
 	// Extract balls on first frame (after game starts)
 	if !g.ballsExtracted {
 		g.extractBalls()
@@ -894,7 +946,7 @@ func (g *Game) Update() error {
 				// Apply YRotate position if active
 				// Note: YRotate REPLACES the entire position, overriding the trSpeed above
 				if yrot, ok := anim.(*YRotate); ok {
-					g.position = *yrot.GetPosition()
+					g.position = yrot.GetPosition()
 				}
 			}
 		}
@@ -905,34 +957,32 @@ func (g *Game) Update() error {
 
 // Draw renders the game
 func (g *Game) Draw(screen *ebiten.Image) {
-	g.mainCanvas.Clear()
+	if !g.dirty {
+		return
+	}
+	g.dirty = false
+
+	screen.Clear()
 	g.playgroundCanvas.Clear()
 
 	// Draw 3D scene
 	g.draw3D()
 
 	// Draw text tile (if available)
-	if g.textImg != nil && g.currentText >= 0 {
-		// Text is tiled in the text.png image
-		srcY := g.currentText * 14
-		srcRect := image.Rect(0, srcY, 640, srcY+14)
-		opts := &ebiten.DrawImageOptions{}
-		g.mainCanvas.DrawImage(g.textImg.SubImage(srcRect).(*ebiten.Image), opts)
+	if g.currentText >= 0 && g.currentText < len(g.textRows) {
+		screen.DrawImage(g.textRows[g.currentText], &ebiten.DrawImageOptions{})
 	}
 
 	// Draw playground canvas
 	opts := &ebiten.DrawImageOptions{}
 	opts.GeoM.Translate(0, 14)
-	g.mainCanvas.DrawImage(g.playgroundCanvas, opts)
+	screen.DrawImage(g.playgroundCanvas, opts)
 
 	// Draw blue lines
-	g.drawBlueLines()
+	g.drawBlueLines(screen)
 
 	// Draw reflection
-	g.drawReflection()
-
-	// Draw to screen
-	screen.DrawImage(g.mainCanvas, &ebiten.DrawImageOptions{})
+	g.drawReflection(screen)
 }
 
 // draw3D renders the 3D vectorball scene
@@ -941,59 +991,41 @@ func (g *Game) draw3D() {
 		return
 	}
 
-	// Transform and project points
-	transformed := make([]Point3D, len(g.currentShape.Points))
+	points := g.currentShape.Points
+	if cap(g.transformed) < len(points) {
+		g.transformed = make([]Point3D, len(points))
+	} else {
+		g.transformed = g.transformed[:len(points)]
+	}
+	transformed := g.transformed
 
-	for i, p := range g.currentShape.Points {
-		// Apply zoom
-		x := p.X * g.zoomFactor
-		y := p.Y * g.zoomFactor
-		z := p.Z * g.zoomFactor
+	rotation := newRotationMatrix(g.rotation, g.zoomFactor)
 
-		// Rotate around X
-		cosX := math.Cos(g.rotation.X)
-		sinX := math.Sin(g.rotation.X)
-		y2 := y*cosX - z*sinX
-		z2 := y*sinX + z*cosX
-
-		// Rotate around Y
-		cosY := math.Cos(g.rotation.Y)
-		sinY := math.Sin(g.rotation.Y)
-		x2 := x*cosY + z2*sinY
-		z3 := -x*sinY + z2*cosY
-
-		// Rotate around Z
-		cosZ := math.Cos(g.rotation.Z)
-		sinZ := math.Sin(g.rotation.Z)
-		x3 := x2*cosZ - y2*sinZ
-		y3 := x2*sinZ + y2*cosZ
-
-		// Translate
-		x3 += g.position.X
-		y3 += g.position.Y
-		z3 += g.position.Z
+	for i, p := range points {
+		x, y, z := rotation.apply(p)
+		x += g.position.X
+		y += g.position.Y
+		z += g.position.Z
 
 		// Perspective projection
-		scale := g.fov / (g.fov + z3)
-		x2d := g.centerX + x3*scale
-		y2d := g.centerY - y3*scale // Invert Y axis
+		scale := g.fov / (g.fov + z)
 
 		transformed[i] = Point3D{
-			Pos:   Vector3{X: x3, Y: y3, Z: z3, Img: p.Img},
-			Depth: z3,
-			X2D:   x2d,
-			Y2D:   y2d,
+			Depth: z,
+			X2D:   g.centerX + x*scale,
+			Y2D:   g.centerY - y*scale,
+			Img:   p.Img,
 		}
 	}
 
 	// Sort by depth (back to front)
-	sort.Slice(transformed, func(i, j int) bool {
-		return transformed[i].Depth < transformed[j].Depth
+	slices.SortFunc(transformed, func(a, b Point3D) int {
+		return cmp.Compare(a.Depth, b.Depth)
 	})
 
 	// Draw balls
 	for _, pt := range transformed {
-		ballIdx := pt.Pos.Img
+		ballIdx := pt.Img
 		if ballIdx >= 0 && ballIdx < len(g.balls) {
 			ball := g.balls[ballIdx]
 			if ball != nil {
@@ -1010,47 +1042,38 @@ func (g *Game) draw3D() {
 }
 
 // drawBlueLines draws the horizontal blue separator lines
-func (g *Game) drawBlueLines() {
+func (g *Game) drawBlueLines(screen *ebiten.Image) {
 	// Horizontal lines
-	drawRect(g.mainCanvas, 0, 382, 640, 18, color.RGBA{0, 0, 68, 255})
-	drawRect(g.mainCanvas, 0, 378, 640, 4, color.RGBA{0, 0, 34, 255})
-	drawRect(g.mainCanvas, 0, 386, 640, 2, color.RGBA{0, 0, 34, 255})
-	drawRect(g.mainCanvas, 0, 394, 640, 2, color.RGBA{0, 0, 88, 255})
+	drawRect(screen, g.whiteImage, 0, 382, 640, 18, color.RGBA{0, 0, 68, 255})
+	drawRect(screen, g.whiteImage, 0, 378, 640, 4, color.RGBA{0, 0, 34, 255})
+	drawRect(screen, g.whiteImage, 0, 386, 640, 2, color.RGBA{0, 0, 34, 255})
+	drawRect(screen, g.whiteImage, 0, 394, 640, 2, color.RGBA{0, 0, 88, 255})
 }
 
 // drawReflection draws the reflection effect at the bottom
-func (g *Game) drawReflection() {
+func (g *Game) drawReflection(screen *ebiten.Image) {
 	// Blue background for reflection area
-	drawRect(g.mainCanvas, 0, 400, 640, 80, color.RGBA{0, 0, 122, 255})
-
-	// Create a temporary image for the reflection
-	// The playground is drawn at Y=14 in mainCanvas, and is 386 pixels tall
-	// So playground goes from Y=14 to Y=400 in mainCanvas
-	// We want to reflect the bottom 80 pixels of the playground just above the blue line
-	// Blue line starts at Y=382 in mainCanvas (which is Y=368 in playground canvas)
-	reflection := ebiten.NewImage(640, 80)
-	srcRect := image.Rect(0, 288, 640, 368) // 80 pixels just above the blue line
-	subImg := g.playgroundCanvas.SubImage(srcRect).(*ebiten.Image)
+	drawRect(screen, g.whiteImage, 0, 400, 640, 80, color.RGBA{0, 0, 122, 255})
 
 	opts := &ebiten.DrawImageOptions{}
 	opts.GeoM.Scale(1, -1)
-	opts.GeoM.Translate(0, 80)
-	reflection.DrawImage(subImg, opts)
-
-	// Draw with transparency
-	opts2 := &ebiten.DrawImageOptions{}
-	opts2.GeoM.Translate(0, 400)
-	opts2.ColorScale.ScaleAlpha(0.5)
-	g.mainCanvas.DrawImage(reflection, opts2)
+	opts.GeoM.Translate(0, 480)
+	opts.ColorScale.ScaleAlpha(0.5)
+	screen.DrawImage(g.reflectionSource, opts)
 }
 
 // drawRect draws a filled rectangle
-func drawRect(dst *ebiten.Image, x, y, w, h int, c color.Color) {
-	img := ebiten.NewImage(w, h)
-	img.Fill(c)
+func drawRect(dst, white *ebiten.Image, x, y, width, height int, c color.RGBA) {
 	opts := &ebiten.DrawImageOptions{}
+	opts.GeoM.Scale(float64(width), float64(height))
 	opts.GeoM.Translate(float64(x), float64(y))
-	dst.DrawImage(img, opts)
+	opts.ColorScale.Scale(
+		float32(c.R)/255,
+		float32(c.G)/255,
+		float32(c.B)/255,
+		float32(c.A)/255,
+	)
+	dst.DrawImage(white, opts)
 }
 
 // Layout returns the screen dimensions
