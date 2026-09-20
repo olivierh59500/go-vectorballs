@@ -4,4 +4,20 @@ This directory contains the construction-kit version of go-vectorballs. The orig
 
 Run the original with `go run ./cmd/vectorballs` and this version with `go run ./dck/cmd/vectorballs` from the repository root.
 
-The choreography and assets stay local; reusable rendering and effects live in `../../lib/democonstructionkit`. Second Reality retains its original ST3 music synchronization.
+The choreography and assets stay local; reusable rendering and effects live in `../../lib/democonstructionkit`.
+
+## Predefined vectorball objects
+
+```sh
+go run ./dck/cmd/vectorballs -object cube -fill edges
+go run ./dck/cmd/vectorballs -object cube -fill solid -segments 4
+go run ./dck/cmd/vectorballs -object pyramid -fill surface
+go run ./dck/cmd/vectorballs -object plane
+go run ./dck/cmd/vectorballs -object flag -segments 12
+```
+
+`-size` sets model dimensions and `-ball` selects a sprite from 0 to 120. Omitting `-object` runs the original choreography. From Go, use `SetObject(ObjectOptions{...})`, or use the independent DCK `sprites.Cube`, `Pyramid`, `Plane` and `Flag` directly with `sprites.Projector`. Fill modes select edges, faces or interior points; all are drawn as balls.
+
+Native object captures: `go test -tags dck_rendercheck ./dck`.
+
+See the [DCK effect configuration guide](../../../lib/democonstructionkit/docs/EFFECT_OPTIONS.md) for the shared API and examples.

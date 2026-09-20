@@ -507,8 +507,10 @@ type Action struct {
 
 // Game represents the main demo state
 type Game struct {
-	sharedProjector sprites.Projector
-	sharedPoints    []sprites.Point
+	objectRest, objectAnimated []sprites.Point
+	objectFlag                 *sprites.Flag
+	sharedProjector            sprites.Projector
+	sharedPoints               []sprites.Point
 	// Images
 	ballsSource image.Image
 	ballsAtlas  *ebiten.Image
@@ -920,6 +922,10 @@ func (g *Game) Update() error {
 	}
 
 	g.frameCount++
+	if g.objectRest != nil {
+		g.updateObject()
+		return nil
+	}
 
 	// Update action timeline
 	g.actionFrames--
