@@ -1,17 +1,19 @@
 package vectorballs
 
+import originalassets "go-vectorballs"
+
 import (
 	"bytes"
-	"cmp"
-	_ "embed"
+
 	"fmt"
+	"github.com/olivierh59500/democonstructionkit/composite"
+	"github.com/olivierh59500/democonstructionkit/sprites"
 	"image"
 	"image/color"
 	_ "image/png"
 	"io"
 	"log"
 	"math"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,12 +36,11 @@ const (
 
 // Embedded assets
 var (
-	//go:embed assets/AllBalls.png
-	ballsData []byte
-	//go:embed assets/text.png
-	textData []byte
-	//go:embed assets/Mindbomb.ym
-	musicData []byte
+	ballsData = originalassets.DCKAssetBallsData()
+
+	textData = originalassets.DCKAssetTextData()
+
+	musicData = originalassets.DCKAssetMusicData()
 
 	sinusPhaseSin, sinusPhaseCos = func() ([15]float64, [15]float64) {
 		var sin, cos [15]float64
@@ -506,6 +507,8 @@ type Action struct {
 
 // Game represents the main demo state
 type Game struct {
+	sharedProjector sprites.Projector
+	sharedPoints    []sprites.Point
 	// Images
 	ballsSource image.Image
 	ballsAtlas  *ebiten.Image
@@ -990,55 +993,15 @@ func (g *Game) draw3D() {
 	if g.currentShape == nil || len(g.currentShape.Points) == 0 {
 		return
 	}
-
-	points := g.currentShape.Points
-	if cap(g.transformed) < len(points) {
-		g.transformed = make([]Point3D, len(points))
+	if cap(g.sharedPoints) < len(g.currentShape.Points) {
+		g.sharedPoints = make([]sprites.Point, len(g.currentShape.Points))
 	} else {
-		g.transformed = g.transformed[:len(points)]
+		g.sharedPoints = g.sharedPoints[:len(g.currentShape.Points)]
 	}
-	transformed := g.transformed
-
-	rotation := newRotationMatrix(g.rotation, g.zoomFactor)
-
-	for i, p := range points {
-		x, y, z := rotation.apply(p)
-		x += g.position.X
-		y += g.position.Y
-		z += g.position.Z
-
-		// Perspective projection
-		scale := g.fov / (g.fov + z)
-
-		transformed[i] = Point3D{
-			Depth: z,
-			X2D:   g.centerX + x*scale,
-			Y2D:   g.centerY - y*scale,
-			Img:   p.Img,
-		}
+	for i, p := range g.currentShape.Points {
+		g.sharedPoints[i] = sprites.Point{X: p.X, Y: p.Y, Z: p.Z, Image: p.Img}
 	}
-
-	// Sort by depth (back to front)
-	slices.SortFunc(transformed, func(a, b Point3D) int {
-		return cmp.Compare(a.Depth, b.Depth)
-	})
-
-	// Draw balls
-	for _, pt := range transformed {
-		ballIdx := pt.Img
-		if ballIdx >= 0 && ballIdx < len(g.balls) {
-			ball := g.balls[ballIdx]
-			if ball != nil {
-				w := float64(ball.Bounds().Dx())
-				h := float64(ball.Bounds().Dy())
-
-				opts := &ebiten.DrawImageOptions{}
-				opts.GeoM.Translate(-w/2, -h/2)
-				opts.GeoM.Translate(pt.X2D, pt.Y2D)
-				g.playgroundCanvas.DrawImage(ball, opts)
-			}
-		}
-	}
+	g.sharedProjector.Draw(g.playgroundCanvas, g.sharedPoints, g.balls, sprites.Projection{Matrix: [9]float64(newRotationMatrix(g.rotation, g.zoomFactor)), Translate: sprites.Point{X: g.position.X, Y: g.position.Y, Z: g.position.Z}, Focal: g.fov, CenterX: g.centerX, CenterY: g.centerY, YUp: true, AscendingDepth: true})
 }
 
 // drawBlueLines draws the horizontal blue separator lines
@@ -1059,7 +1022,7 @@ func (g *Game) drawReflection(screen *ebiten.Image) {
 	opts.GeoM.Scale(1, -1)
 	opts.GeoM.Translate(0, 480)
 	opts.ColorScale.ScaleAlpha(0.5)
-	screen.DrawImage(g.reflectionSource, opts)
+	composite.Instance{Image: g.reflectionSource, Options: *opts}.Draw(screen)
 }
 
 // drawRect draws a filled rectangle
@@ -1073,7 +1036,7 @@ func drawRect(dst, white *ebiten.Image, x, y, width, height int, c color.RGBA) {
 		float32(c.B)/255,
 		float32(c.A)/255,
 	)
-	dst.DrawImage(white, opts)
+	composite.Instance{Image: white, Options: *opts}.Draw(dst)
 }
 
 // Layout returns the screen dimensions
