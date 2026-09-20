@@ -5,6 +5,7 @@ import (
 	"cmp"
 	_ "embed"
 	"fmt"
+	"github.com/olivierh59500/democonstructionkit/composite"
 	"image"
 	"image/color"
 	_ "image/png"
@@ -1035,7 +1036,7 @@ func (g *Game) draw3D() {
 				opts := &ebiten.DrawImageOptions{}
 				opts.GeoM.Translate(-w/2, -h/2)
 				opts.GeoM.Translate(pt.X2D, pt.Y2D)
-				g.playgroundCanvas.DrawImage(ball, opts)
+				composite.Instance{Image: ball, Options: *opts}.Draw(g.playgroundCanvas)
 			}
 		}
 	}
@@ -1059,7 +1060,7 @@ func (g *Game) drawReflection(screen *ebiten.Image) {
 	opts.GeoM.Scale(1, -1)
 	opts.GeoM.Translate(0, 480)
 	opts.ColorScale.ScaleAlpha(0.5)
-	screen.DrawImage(g.reflectionSource, opts)
+	composite.Instance{Image: g.reflectionSource, Options: *opts}.Draw(screen)
 }
 
 // drawRect draws a filled rectangle
@@ -1073,7 +1074,7 @@ func drawRect(dst, white *ebiten.Image, x, y, width, height int, c color.RGBA) {
 		float32(c.B)/255,
 		float32(c.A)/255,
 	)
-	dst.DrawImage(white, opts)
+	composite.Instance{Image: white, Options: *opts}.Draw(dst)
 }
 
 // Layout returns the screen dimensions
