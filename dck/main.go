@@ -6,6 +6,7 @@ import (
 	"bytes"
 
 	"fmt"
+	kit "github.com/olivierh59500/democonstructionkit"
 	"github.com/olivierh59500/democonstructionkit/composite"
 	"github.com/olivierh59500/democonstructionkit/sprites"
 	"image"
@@ -523,7 +524,7 @@ type Game struct {
 
 	// Canvases
 	playgroundCanvas *ebiten.Image
-	reflectionSource *ebiten.Image
+	waterReflection  *composite.WaterReflection
 
 	// 3D state
 	shapeManager *ShapeManager
@@ -580,7 +581,7 @@ func NewGame() *Game {
 
 	// Create canvases
 	g.playgroundCanvas = ebiten.NewImage(640, 386)
-	g.reflectionSource = g.playgroundCanvas.SubImage(image.Rect(0, 288, 640, 368)).(*ebiten.Image)
+	g.initReflection()
 	g.whiteImage = ebiten.NewImage(1, 1)
 	g.whiteImage.Fill(color.White)
 
@@ -1019,16 +1020,25 @@ func (g *Game) drawBlueLines(screen *ebiten.Image) {
 	drawRect(screen, g.whiteImage, 0, 394, 640, 2, color.RGBA{0, 0, 88, 255})
 }
 
-// drawReflection draws the reflection effect at the bottom
+// initReflection preserves the original crop, waterline and opacity. The same
+// DCK pass can reflect any live layer and optionally add waves, tint and fading.
+func (g *Game) initReflection() {
+	config := composite.DefaultWaterReflectionConfig()
+	config.Source = image.Rect(0, 288, 640, 368)
+	config.Horizon = 400
+	var err error
+	g.waterReflection, err = composite.NewWaterReflection(config)
+	if err != nil {
+		panic(err)
+	}
+}
+
+// drawReflection draws the reflection effect at the bottom.
 func (g *Game) drawReflection(screen *ebiten.Image) {
 	// Blue background for reflection area
 	drawRect(screen, g.whiteImage, 0, 400, 640, 80, color.RGBA{0, 0, 122, 255})
 
-	opts := &ebiten.DrawImageOptions{}
-	opts.GeoM.Scale(1, -1)
-	opts.GeoM.Translate(0, 480)
-	opts.ColorScale.ScaleAlpha(0.5)
-	composite.Instance{Image: g.reflectionSource, Options: *opts}.Draw(screen)
+	g.waterReflection.Draw(screen, g.playgroundCanvas, kit.Frame{Time: float64(g.frameCount) / 60})
 }
 
 // drawRect draws a filled rectangle
@@ -1052,6 +1062,9 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 // Cleanup releases resources
 func (g *Game) Cleanup() {
+	if g.waterReflection != nil {
+		_ = g.waterReflection.Close()
+	}
 	if g.audioPlayer != nil {
 		g.audioPlayer.Close()
 	}

@@ -4,7 +4,6 @@ package vectorballs
 
 import (
 	"fmt"
-	"image"
 	"image/color"
 	"os"
 	"testing"
@@ -77,7 +76,7 @@ func TestMain(m *testing.M) {
 		g := &Game{shapeManager: NewShapeManager(), zoomFactor: .35, fov: 1450, centerX: 320, centerY: 193, position: Vector3{Z: 850}, dirty: true}
 		g.loadImages()
 		g.playgroundCanvas = ebiten.NewImage(640, 386)
-		g.reflectionSource = g.playgroundCanvas.SubImage(image.Rect(0, 288, 640, 368)).(*ebiten.Image)
+		g.initReflection()
 		g.whiteImage = ebiten.NewImage(1, 1)
 		g.whiteImage.Fill(color.White)
 		if err := g.SetObject(objectCases[0]); err != nil {
