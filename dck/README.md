@@ -4,7 +4,10 @@ This directory contains the construction-kit version of go-vectorballs. The orig
 
 Run the original with `go run ./cmd/vectorballs` and this version with `go run ./dck/cmd/vectorballs` from the repository root.
 
-The choreography and assets stay local; reusable rendering and effects live in `../../lib/democonstructionkit`.
+The choreography and assets remain in this repository. Reusable rendering and
+effects come from the published `github.com/olivierh59500/democonstructionkit`
+module pinned in `go.mod`. Go downloads the dependencies automatically, including
+`github.com/olivierh59500/ym-player v1.0.0` for YM playback.
 
 ## Predefined vectorball objects
 
