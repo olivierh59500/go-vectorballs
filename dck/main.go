@@ -1,27 +1,27 @@
 package vectorballs
 
-import originalassets "go-vectorballs"
-
 import (
 	"bytes"
+	originalassets "go-vectorballs"
 
-	"fmt"
+	"github.com/olivierh59500/democonstructionkit/sound"
+
+	"image"
+	"image/color"
+
 	kit "github.com/olivierh59500/democonstructionkit"
 	"github.com/olivierh59500/democonstructionkit/composite"
 	"github.com/olivierh59500/democonstructionkit/sprites"
-	"image"
-	"image/color"
+
 	_ "image/png"
-	"io"
 	"log"
 	"math"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
 	audio "github.com/olivierh59500/democonstructionkit/sound/output"
-	"github.com/olivierh59500/ym-player/pkg/stsound"
 )
 
 const (
@@ -177,124 +177,6 @@ func (sm *ShapeManager) GetCopy(name string) *Shape {
 	points := make([]Vector3, len(original.Points))
 	copy(points, original.Points)
 	return &Shape{Points: points}
-}
-
-// YMPlayer wraps the YM player for use with Ebiten's audio system
-type YMPlayer struct {
-	player     *stsound.StSound
-	sampleRate int
-	buffer     []int16
-	mutex      sync.Mutex
-	position   int64 // PCM byte offset
-	totalBytes int64
-	loop       bool
-}
-
-// NewYMPlayer creates a new YM player instance
-func NewYMPlayer(data []byte, sampleRate int, loop bool) (*YMPlayer, error) {
-	player := stsound.CreateWithRate(sampleRate)
-
-	if err := player.LoadMemory(data); err != nil {
-		player.Destroy()
-		return nil, fmt.Errorf("failed to load YM data: %w", err)
-	}
-
-	player.SetLoopMode(loop)
-
-	info := player.GetInfo()
-	totalSamples := int64(info.MusicTimeInMs) * int64(sampleRate) / 1000
-
-	return &YMPlayer{
-		player:     player,
-		sampleRate: sampleRate,
-		buffer:     make([]int16, 4096),
-		totalBytes: totalSamples * 4,
-		loop:       loop,
-	}, nil
-}
-
-// Read implements io.Reader for audio streaming
-func (y *YMPlayer) Read(p []byte) (n int, err error) {
-	y.mutex.Lock()
-	defer y.mutex.Unlock()
-
-	// Each frame is one signed 16-bit sample duplicated to two channels.
-	byteCount := len(p) &^ 3
-	samplesNeeded := byteCount / 4
-
-	processed := 0
-	for processed < samplesNeeded {
-		chunkSize := min(samplesNeeded-processed, len(y.buffer))
-
-		if !y.player.Compute(y.buffer[:chunkSize], chunkSize) {
-			if !y.loop {
-				clear(p[processed*4 : byteCount])
-				y.position = y.totalBytes
-				return byteCount, io.EOF
-			}
-		}
-
-		for i := 0; i < chunkSize; i++ {
-			sample := y.buffer[i]
-			offset := (processed + i) * 4
-			p[offset] = byte(sample)
-			p[offset+1] = byte(sample >> 8)
-			p[offset+2] = byte(sample)
-			p[offset+3] = byte(sample >> 8)
-		}
-
-		processed += chunkSize
-		y.position += int64(chunkSize * 4)
-	}
-
-	return byteCount, nil
-}
-
-// Seek implements io.Seeker
-func (y *YMPlayer) Seek(offset int64, whence int) (int64, error) {
-	y.mutex.Lock()
-	defer y.mutex.Unlock()
-
-	var newPos int64
-	switch whence {
-	case io.SeekStart:
-		newPos = offset
-	case io.SeekCurrent:
-		newPos = y.position + offset
-	case io.SeekEnd:
-		newPos = y.totalBytes + offset
-	default:
-		return 0, fmt.Errorf("invalid whence: %d", whence)
-	}
-
-	if newPos < 0 {
-		newPos = 0
-	}
-	if newPos > y.totalBytes {
-		newPos = y.totalBytes
-	}
-	newPos &^= 3
-
-	y.player.Seek(uint32(newPos / 4 * 1000 / int64(y.sampleRate)))
-	y.position = newPos
-	return newPos, nil
-}
-
-// Close releases resources
-func (y *YMPlayer) Close() error {
-	y.mutex.Lock()
-	defer y.mutex.Unlock()
-
-	if y.player != nil {
-		y.player.Destroy()
-		y.player = nil
-	}
-	return nil
-}
-
-// Length returns total length
-func (y *YMPlayer) Length() int64 {
-	return y.totalBytes
 }
 
 // Animation interface
@@ -548,7 +430,7 @@ type Game struct {
 	// Audio
 	audioContext *audio.Context
 	audioPlayer  *audio.Player
-	ymPlayer     *YMPlayer
+	musicStream  *sound.Stream
 
 	// Text
 	currentText int
@@ -717,22 +599,22 @@ func copyImage(dst *image.RGBA, destination image.Point, src image.Image, source
 	}
 }
 
-// initAudio initializes the audio system with YM music
+// initAudio opens the soundtrack and starts audio output.
 func (g *Game) initAudio() {
 	g.audioContext = audio.NewContext(audioSampleRate)
 
 	var err error
-	g.ymPlayer, err = NewYMPlayer(musicData, audioSampleRate, true)
+	g.musicStream, err = sound.Open("music.ym", musicData, sound.Options{SampleRate: audioSampleRate, Loop: true, PCMFormat: sound.PCM16, Gain: 1})
 	if err != nil {
-		log.Printf("Failed to create YM player: %v", err)
+		log.Printf("Failed to open music: %v", err)
 		return
 	}
 
-	g.audioPlayer, err = g.audioContext.NewPlayer(g.ymPlayer)
+	g.audioPlayer, err = g.audioContext.NewPlayer(g.musicStream)
 	if err != nil {
 		log.Printf("Failed to create audio player: %v", err)
-		g.ymPlayer.Close()
-		g.ymPlayer = nil
+		g.musicStream.Close()
+		g.musicStream = nil
 		return
 	}
 
@@ -1068,7 +950,7 @@ func (g *Game) Cleanup() {
 	if g.audioPlayer != nil {
 		g.audioPlayer.Close()
 	}
-	if g.ymPlayer != nil {
-		g.ymPlayer.Close()
+	if g.musicStream != nil {
+		g.musicStream.Close()
 	}
 }

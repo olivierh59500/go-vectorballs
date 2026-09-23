@@ -4,6 +4,8 @@ import (
 	"io"
 	"math"
 	"testing"
+
+	"github.com/olivierh59500/democonstructionkit/sound"
 )
 
 func TestRotationMatrixMatchesSequentialRotations(t *testing.T) {
@@ -26,28 +28,35 @@ func TestRotationMatrixMatchesSequentialRotations(t *testing.T) {
 	}
 }
 
-func TestYMPlayerSeekUsesPCMByteOffsets(t *testing.T) {
-	player, err := NewYMPlayer(musicData, audioSampleRate, true)
+func TestMusicStreamSeekUsesPCMByteOffsets(t *testing.T) {
+	player, err := sound.Open("music.ym", musicData, sound.Options{SampleRate: audioSampleRate, Loop: true, PCMFormat: sound.PCM16, Gain: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer player.Close()
-
-	want := int64(audioSampleRate * 4)
-	got, err := player.Seek(want+3, io.SeekStart)
-	if err != nil {
+	// Preserve the exact byte position, including the middle of a stereo frame.
+	const tail = 97
+	target := int64(audioSampleRate*4 + 3)
+	sequential := make([]byte, target+tail)
+	if _, err := io.ReadFull(player, sequential); err != nil {
 		t.Fatal(err)
 	}
-	if got != want {
-		t.Fatalf("Seek returned %d, want aligned byte offset %d", got, want)
+	if got, err := player.Seek(target, io.SeekStart); err != nil || got != target {
+		t.Fatalf("Seek = %d, %v", got, err)
 	}
-	if position := player.player.GetPos(); position < 990 || position > 1010 {
-		t.Fatalf("StSound position is %d ms after seeking to one second", position)
+	after := make([]byte, tail)
+	if _, err := io.ReadFull(player, after); err != nil {
+		t.Fatal(err)
+	}
+	for i, v := range after {
+		if v != sequential[int(target)+i] {
+			t.Fatalf("seek did not reproduce PCM at byte %d", i)
+		}
 	}
 }
 
-func TestYMPlayerReadDoesNotAllocate(t *testing.T) {
-	player, err := NewYMPlayer(musicData, audioSampleRate, true)
+func TestMusicStreamReadDoesNotAllocate(t *testing.T) {
+	player, err := sound.Open("music.ym", musicData, sound.Options{SampleRate: audioSampleRate, Loop: true, PCMFormat: sound.PCM16, Gain: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,12 +73,12 @@ func TestYMPlayerReadDoesNotAllocate(t *testing.T) {
 		}
 	})
 	if allocations != 0 {
-		t.Fatalf("YMPlayer.Read allocated %.2f objects per call, want zero", allocations)
+		t.Fatalf("MusicStream.Read allocated %.2f objects per call, want zero", allocations)
 	}
 }
 
-func BenchmarkYMPlayerRead(b *testing.B) {
-	player, err := NewYMPlayer(musicData, audioSampleRate, true)
+func BenchmarkMusicStreamRead(b *testing.B) {
+	player, err := sound.Open("music.ym", musicData, sound.Options{SampleRate: audioSampleRate, Loop: true, PCMFormat: sound.PCM16, Gain: 1})
 	if err != nil {
 		b.Fatal(err)
 	}
