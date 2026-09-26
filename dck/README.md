@@ -28,6 +28,9 @@ The original choreography's shape-to-shape transitions now use
 current XYZ pose, retains each ball's artwork index, and advances with the
 original per-frame rounding. The sine grid, helicopter rotors, Y orbit and
 bouncing position use the same configurable DCK point-scene family.
+The per-frame XYZ rotation matrix now comes from
+`geometry.RotateXYZScaled`; it preserves the original coefficient order while
+removing the trigonometric matrix builder from this production source.
 
 `geometry.PointSequence` now owns the full stage clock and the ordered effects.
 The production's shape table and action data live in the pure Go `dck/scene`

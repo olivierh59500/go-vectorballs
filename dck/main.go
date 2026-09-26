@@ -17,7 +17,6 @@ import (
 
 	_ "image/png"
 	"log"
-	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -51,25 +50,6 @@ type ShapeManager = scene.ShapeManager
 type Action = scene.Action
 
 func NewShapeManager() *ShapeManager { return scene.NewShapeManager() }
-
-type matrix3 [9]float64
-
-func newRotationMatrix(rotation Vector3, scale float64) matrix3 {
-	sinX, cosX := math.Sincos(rotation.X)
-	sinY, cosY := math.Sincos(rotation.Y)
-	sinZ, cosZ := math.Sincos(rotation.Z)
-	return matrix3{
-		cosY * cosZ * scale,
-		(sinX*sinY*cosZ - cosX*sinZ) * scale,
-		(cosX*sinY*cosZ + sinX*sinZ) * scale,
-		cosY * sinZ * scale,
-		(sinX*sinY*sinZ + cosX*cosZ) * scale,
-		(cosX*sinY*sinZ - sinX*cosZ) * scale,
-		-sinY * scale,
-		sinX * cosY * scale,
-		cosX * cosY * scale,
-	}
-}
 
 // Game represents the main demo state
 type Game struct {
@@ -368,7 +348,8 @@ func (g *Game) draw3D() {
 	for i, p := range g.currentShape.Points {
 		g.sharedPoints[i] = sprites.Point{X: p.X, Y: p.Y, Z: p.Z, Image: p.Img}
 	}
-	g.sharedProjector.Draw(g.playgroundCanvas, g.sharedPoints, g.balls, sprites.Projection{Matrix: [9]float64(newRotationMatrix(g.rotation, g.zoomFactor)), Translate: sprites.Point{X: g.position.X, Y: g.position.Y, Z: g.position.Z}, Focal: g.fov, CenterX: g.centerX, CenterY: g.centerY, YUp: true, AscendingDepth: true})
+	angles := geometry.Vec3{X: g.rotation.X, Y: g.rotation.Y, Z: g.rotation.Z}
+	g.sharedProjector.Draw(g.playgroundCanvas, g.sharedPoints, g.balls, sprites.Projection{Matrix: [9]float64(geometry.RotateXYZScaled(angles, g.zoomFactor)), Translate: sprites.Point{X: g.position.X, Y: g.position.Y, Z: g.position.Z}, Focal: g.fov, CenterX: g.centerX, CenterY: g.centerY, YUp: true, AscendingDepth: true})
 }
 
 // drawBlueLines draws the horizontal blue separator lines

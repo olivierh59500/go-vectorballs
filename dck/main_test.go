@@ -5,14 +5,9 @@ import (
 	"math"
 	"testing"
 
+	"github.com/olivierh59500/democonstructionkit/geometry"
 	"github.com/olivierh59500/democonstructionkit/sound"
 )
-
-func (m matrix3) apply(point Vector3) (x, y, z float64) {
-	return point.X*m[0] + point.Y*m[1] + point.Z*m[2],
-		point.X*m[3] + point.Y*m[4] + point.Z*m[5],
-		point.X*m[6] + point.Y*m[7] + point.Z*m[8]
-}
 
 func TestRotationMatrixMatchesSequentialRotations(t *testing.T) {
 	tests := []struct {
@@ -27,7 +22,10 @@ func TestRotationMatrixMatchesSequentialRotations(t *testing.T) {
 
 	for _, test := range tests {
 		wantX, wantY, wantZ := sequentialRotation(test.point, test.rotation, test.scale)
-		gotX, gotY, gotZ := newRotationMatrix(test.rotation, test.scale).apply(test.point)
+		angles := geometry.Vec3{X: test.rotation.X, Y: test.rotation.Y, Z: test.rotation.Z}
+		point := geometry.Vec3{X: test.point.X, Y: test.point.Y, Z: test.point.Z}
+		rotated := geometry.RotateXYZScaled(angles, test.scale).Apply(point)
+		gotX, gotY, gotZ := rotated.X, rotated.Y, rotated.Z
 		if !closeEnough(gotX, wantX) || !closeEnough(gotY, wantY) || !closeEnough(gotZ, wantZ) {
 			t.Fatalf("rotation mismatch: got (%v, %v, %v), want (%v, %v, %v)", gotX, gotY, gotZ, wantX, wantY, wantZ)
 		}
