@@ -33,5 +33,9 @@ bouncing position use the same configurable DCK point-scene family.
 The production's shape table and action data live in the pure Go `dck/scene`
 package; `go test ./dck/scene` checks a complete action cycle without a GPU.
 The DCK game keeps artwork, audio, projection, reflection and layer placement.
+The independent state comparison in that test now checks two complete cycles
+at every logical tick, including all model coordinates and ball indices.
+`go test -bench 'Benchmark(Shared|Former)PointSequence$' -benchmem ./dck/scene`
+compares controller CPU time and allocations without rendering.
 
 See the [DCK effect configuration guide](../../../lib/democonstructionkit/docs/EFFECT_OPTIONS.md) for the shared API and examples.
