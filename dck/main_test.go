@@ -8,6 +8,12 @@ import (
 	"github.com/olivierh59500/democonstructionkit/sound"
 )
 
+func (m matrix3) apply(point Vector3) (x, y, z float64) {
+	return point.X*m[0] + point.Y*m[1] + point.Z*m[2],
+		point.X*m[3] + point.Y*m[4] + point.Z*m[5],
+		point.X*m[6] + point.Y*m[7] + point.Z*m[8]
+}
+
 func TestRotationMatrixMatchesSequentialRotations(t *testing.T) {
 	tests := []struct {
 		point    Vector3

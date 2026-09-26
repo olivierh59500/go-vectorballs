@@ -21,8 +21,10 @@ func (g *Game) SetObject(c ObjectOptions) error {
 	if c.Name == "" {
 		g.objectRest = nil
 		g.objectFlag = nil
-		g.currentAction = -1
-		g.nextAction()
+		if err := g.sequence.Reset(); err != nil {
+			return err
+		}
+		g.syncSequence()
 		return nil
 	}
 	var points []sprites.Point

@@ -24,11 +24,14 @@ go run ./dck/cmd/vectorballs -object flag -segments 12
 Native object captures: `go test -tags dck_rendercheck ./dck`.
 
 The original choreography's shape-to-shape transitions now use
-`geometry.PointMorph` through a small point adapter. A new morph begins at the
+`geometry.PointMorph` through the shared sequence. A new morph begins at the
 current XYZ pose, retains each ball's artwork index, and advances with the
-original per-frame rounding. The timeline and authored shape table remain in
-this repository while its remaining reusable action sequence is extracted.
-The sine grid, helicopter rotors, Y orbit and bouncing position now also use
-configurable DCK controllers through the same small adapter layer.
+original per-frame rounding. The sine grid, helicopter rotors, Y orbit and
+bouncing position use the same configurable DCK point-scene family.
+
+`geometry.PointSequence` now owns the full stage clock and the ordered effects.
+The production's shape table and action data live in the pure Go `dck/scene`
+package; `go test ./dck/scene` checks a complete action cycle without a GPU.
+The DCK game keeps artwork, audio, projection, reflection and layer placement.
 
 See the [DCK effect configuration guide](../../../lib/democonstructionkit/docs/EFFECT_OPTIONS.md) for the shared API and examples.
