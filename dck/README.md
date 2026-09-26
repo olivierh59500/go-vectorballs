@@ -17,9 +17,10 @@ go run ./dck/cmd/vectorballs -object cube -fill solid -segments 4
 go run ./dck/cmd/vectorballs -object pyramid -fill surface
 go run ./dck/cmd/vectorballs -object plane
 go run ./dck/cmd/vectorballs -object flag -segments 12
+go run ./dck/cmd/vectorballs -object sphere -segments 6
 ```
 
-`-size` sets model dimensions and `-ball` selects a sprite from 0 to 120. Omitting `-object` runs the original choreography. From Go, use `SetObject(ObjectOptions{...})`, or construct a complete DCK `sprites.ProjectedObject` with an editable cube, pyramid, plane, flag or custom point source. Fill modes select edges, faces or interior points; all are drawn as balls. Each object owns its rotation, optional flag wave, projection and reusable point buffers, so several independently configured instances can share the same ball atlas.
+`-size` sets model dimensions and `-ball` selects a sprite from 0 to 120. Omitting `-object` runs the original choreography. From Go, use `SetObject(ObjectOptions{...})`, or construct a complete DCK `sprites.ProjectedObject` with an editable cube, pyramid, plane, flag, sphere or custom point source. Fill modes select edges, faces or interior points for cubes and pyramids; every object is drawn as balls. The sphere uses an even Fibonacci distribution with `4 × segments²` balls and accepts `segments` from 1 to 32. Each object owns its rotation, optional flag wave, projection and reusable point buffers, so several independently configured instances can share the same ball atlas.
 
 Native object captures: `go test -tags dck_rendercheck ./dck`.
 Thirty-six complete-frame captures taken before and after this migration match
@@ -33,9 +34,13 @@ authored default sequence produced 744 distinct presented-frame intervals:
 p95 16.780 ms, maximum 17.072 ms, none above 20 ms. Process PSS was
 198,956 KiB, including 101,156 KiB of graphics memory, and thermal status
 remained 0. The Android window now sets `FLAG_KEEP_SCREEN_ON`; the Pixel stayed
-awake during this unattended sample. The optional cube, pyramid, plane and
-flag modes have exact desktop GPU captures, but have not yet been selected in
-the Android application.
+awake during this unattended sample. Cube, pyramid, plane and flag retain
+their exact desktop comparisons. The new sphere has five GPU captures,
+including its reflection; none of these optional modes has yet been selected
+in the Android application.
+After this sphere addition, the updated APK's authored sequence had another
+744 presented-frame intervals: p95 16.776 ms, maximum 16.961 ms and none above
+20 ms. Android still reports `KEEP_SCREEN_ON` for the foreground window.
 
 The original choreography's shape-to-shape transitions now use
 `geometry.PointMorph` through the shared sequence. A new morph begins at the

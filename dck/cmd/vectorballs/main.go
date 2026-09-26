@@ -10,9 +10,9 @@ import (
 )
 
 func main() {
-	object := flag.String("object", "", "optional object: cube, pyramid, plane or flag")
+	object := flag.String("object", "", "optional object: cube, pyramid, plane, flag or sphere")
 	fill := flag.String("fill", "edges", "cube/pyramid filling: edges, surface or solid")
-	segments := flag.Int("segments", 6, "edge subdivisions")
+	segments := flag.Int("segments", 6, "edge subdivisions or sphere density (4*n*n balls)")
 	size := flag.Float64("size", 640, "object size in model units")
 	ball := flag.Int("ball", 120, "ball sprite index")
 	flag.Parse()
