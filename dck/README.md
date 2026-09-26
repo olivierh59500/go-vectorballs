@@ -23,4 +23,11 @@ go run ./dck/cmd/vectorballs -object flag -segments 12
 
 Native object captures: `go test -tags dck_rendercheck ./dck`.
 
+The original choreography's shape-to-shape transitions now use
+`geometry.PointMorph` through a small point adapter. A new morph begins at the
+current XYZ pose, retains each ball's artwork index, and advances with the
+original per-frame rounding. The timeline and authored shape table remain in
+this repository while their remaining reusable animation controllers are
+extracted.
+
 See the [DCK effect configuration guide](../../../lib/democonstructionkit/docs/EFFECT_OPTIONS.md) for the shared API and examples.

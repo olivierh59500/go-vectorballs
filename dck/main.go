@@ -207,45 +207,6 @@ func (s *Sinus2D) Run(points []Vector3, frameCount int) {
 	s.ctrAmp += math.Pi / 60
 }
 
-// MorphingTo animation
-type MorphingTo struct {
-	steps      []Vector3
-	frameCount int
-	maxFrames  int
-}
-
-func NewMorphingTo(from, to []Vector3, nbFrames int) *MorphingTo {
-	steps := make([]Vector3, len(from))
-	for i := range from {
-		if i < len(to) {
-			steps[i] = Vector3{
-				X:   (to[i].X - from[i].X) / float64(nbFrames),
-				Y:   (to[i].Y - from[i].Y) / float64(nbFrames),
-				Z:   (to[i].Z - from[i].Z) / float64(nbFrames),
-				Img: 0,
-			}
-		}
-	}
-	return &MorphingTo{
-		steps:     steps,
-		maxFrames: nbFrames,
-	}
-}
-
-func (m *MorphingTo) Run(points []Vector3, frameCount int) {
-	if m.frameCount >= m.maxFrames {
-		return
-	}
-	for i := range points {
-		if i < len(m.steps) {
-			points[i].X += m.steps[i].X
-			points[i].Y += m.steps[i].Y
-			points[i].Z += m.steps[i].Z
-		}
-	}
-	m.frameCount++
-}
-
 // YRotate animation
 type YRotate struct {
 	ctr   float64
