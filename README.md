@@ -25,6 +25,16 @@ Pour générer l'AAR ARM64, assembler l'APK, l'installer et le lancer :
 ./scripts/run-android.sh
 ```
 
+Pour construire et installer la version DCK avec les mêmes assets :
+
+```sh
+./scripts/run-android.sh --dck
+```
+
+L'option `--build-only` prépare l'APK choisi sans l'installer.
+L'activité garde désormais l'écran allumé tant que la démo est au premier plan,
+comme les autres démos Android ; le verrouillage manuel reste possible.
+
 Avec plusieurs appareils connectés :
 
 ```sh

@@ -2,6 +2,17 @@
 
 set -eu
 
+mobile_package=./mobile
+build_only=false
+for option in "$@"; do
+	case "$option" in
+		--dck) mobile_package=./dck/mobile ;;
+		--build-only) build_only=true ;;
+		--help|-h) echo "Usage: $0 [--dck] [--build-only]"; exit 0 ;;
+		*) echo "Usage: $0 [--dck] [--build-only]" >&2; exit 2 ;;
+	esac
+done
+
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
 
@@ -58,12 +69,16 @@ go run github.com/hajimehoshi/ebiten/v2/cmd/ebitenmobile@v2.9.11 bind \
 	-trimpath \
 	-ldflags="-s -w" \
 	-o android/app/libs/vectorballs.aar \
-	./mobile
+	"$mobile_package"
 
 "$project_dir/android/gradlew" \
 	--no-daemon \
 	-p "$project_dir/android" \
 	:app:assembleDebug
+
+if "$build_only"; then
+	exit 0
+fi
 
 adb=$android_sdk/platform-tools/adb
 if [ -z "${ANDROID_SERIAL:-}" ]; then

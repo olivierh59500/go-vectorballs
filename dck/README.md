@@ -28,6 +28,15 @@ demo no longer converts the optional object's points between two local slice
 types on each frame. The authored action script below remains a separate DCK
 `geometry.PointSequence` and keeps its original timing.
 
+The current DCK APK was installed on a Pixel 10a (Android 17/API 37). Its
+authored default sequence produced 744 distinct presented-frame intervals:
+p95 16.780 ms, maximum 17.072 ms, none above 20 ms. Process PSS was
+198,956 KiB, including 101,156 KiB of graphics memory, and thermal status
+remained 0. The Android window now sets `FLAG_KEEP_SCREEN_ON`; the Pixel stayed
+awake during this unattended sample. The optional cube, pyramid, plane and
+flag modes have exact desktop GPU captures, but have not yet been selected in
+the Android application.
+
 The original choreography's shape-to-shape transitions now use
 `geometry.PointMorph` through the shared sequence. A new morph begins at the
 current XYZ pose, retains each ball's artwork index, and advances with the

@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
+import android.view.WindowManager;
 
 import com.olivierh59500.vectorballsmobile.EbitenView;
 
@@ -19,6 +20,8 @@ public final class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         Seq.setContext(getApplicationContext());
+        // Keep the demo visible during unattended playback.
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         gameView = new EbitenView(this);
         setContentView(gameView);
         hideSystemBars();
