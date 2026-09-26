@@ -53,10 +53,9 @@ func NewShapeManager() *ShapeManager { return scene.NewShapeManager() }
 
 // Game represents the main demo state
 type Game struct {
-	objectRest, objectAnimated []sprites.Point
-	objectFlag                 *sprites.Flag
-	sharedProjector            sprites.Projector
-	sharedPoints               []sprites.Point
+	object          *sprites.ProjectedObject
+	sharedProjector sprites.Projector
+	sharedPoints    []sprites.Point
 	// Images
 	ballsSource image.Image
 	ballsAtlas  *ebiten.Image
@@ -292,9 +291,8 @@ func (g *Game) Update() error {
 	}
 
 	g.frameCount++
-	if g.objectRest != nil {
-		g.updateObject()
-		return nil
+	if g.object != nil {
+		return g.object.Update(kit.Frame{Time: float64(g.frameCount) / 60})
 	}
 
 	if err := g.sequence.Step(); err != nil {
@@ -337,6 +335,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 // draw3D renders the 3D vectorball scene
 func (g *Game) draw3D() {
+	if g.object != nil {
+		g.object.Draw(g.playgroundCanvas, g.balls)
+		return
+	}
 	if g.currentShape == nil || len(g.currentShape.Points) == 0 {
 		return
 	}

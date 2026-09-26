@@ -19,9 +19,14 @@ go run ./dck/cmd/vectorballs -object plane
 go run ./dck/cmd/vectorballs -object flag -segments 12
 ```
 
-`-size` sets model dimensions and `-ball` selects a sprite from 0 to 120. Omitting `-object` runs the original choreography. From Go, use `SetObject(ObjectOptions{...})`, or use the independent DCK `sprites.Cube`, `Pyramid`, `Plane` and `Flag` directly with `sprites.Projector`. Fill modes select edges, faces or interior points; all are drawn as balls.
+`-size` sets model dimensions and `-ball` selects a sprite from 0 to 120. Omitting `-object` runs the original choreography. From Go, use `SetObject(ObjectOptions{...})`, or construct a complete DCK `sprites.ProjectedObject` with an editable cube, pyramid, plane, flag or custom point source. Fill modes select edges, faces or interior points; all are drawn as balls. Each object owns its rotation, optional flag wave, projection and reusable point buffers, so several independently configured instances can share the same ball atlas.
 
 Native object captures: `go test -tags dck_rendercheck ./dck`.
+Thirty-six complete-frame captures taken before and after this migration match
+pixel for pixel, including every object change and the water reflection. The
+demo no longer converts the optional object's points between two local slice
+types on each frame. The authored action script below remains a separate DCK
+`geometry.PointSequence` and keeps its original timing.
 
 The original choreography's shape-to-shape transitions now use
 `geometry.PointMorph` through the shared sequence. A new morph begins at the

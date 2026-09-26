@@ -23,6 +23,11 @@ var objectCases = []ObjectOptions{
 	{Name: "flag", Segments: 12, Image: 120, Size: 640},
 }
 
+// Capture each object before and after its switch, plus a mid-stage frame.
+var objectCaptureFrames = []int{0, 1, 29, 30, 59, 60, 61, 89, 90, 119, 120, 121,
+	149, 150, 179, 180, 181, 209, 210, 239, 240, 241, 269, 270,
+	299, 300, 301, 329, 330, 359, 360, 361, 389, 390, 419, 420}
+
 type objectCheck struct {
 	*Game
 	tick int
@@ -72,7 +77,7 @@ func TestMain(m *testing.M) {
 		}
 	}
 	var check *objectCheck
-	err := capture.Run(capture.Config{Directory: dir, Frames: []int{30, 90, 150, 210, 270, 330, 390, 420}, Width: 640, Height: 480}, func() (ebiten.Game, error) {
+	err := capture.Run(capture.Config{Directory: dir, Frames: objectCaptureFrames, Width: 640, Height: 480}, func() (ebiten.Game, error) {
 		g := &Game{shapeManager: NewShapeManager(), zoomFactor: .35, fov: 1450, centerX: 320, centerY: 193, position: Vector3{Z: 850}, dirty: true}
 		g.loadImages()
 		g.playgroundCanvas = ebiten.NewImage(640, 386)
