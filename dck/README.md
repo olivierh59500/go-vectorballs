@@ -27,7 +27,8 @@ The original choreography's shape-to-shape transitions now use
 `geometry.PointMorph` through a small point adapter. A new morph begins at the
 current XYZ pose, retains each ball's artwork index, and advances with the
 original per-frame rounding. The timeline and authored shape table remain in
-this repository while their remaining reusable animation controllers are
-extracted.
+this repository while its remaining reusable action sequence is extracted.
+The sine grid, helicopter rotors, Y orbit and bouncing position now also use
+configurable DCK controllers through the same small adapter layer.
 
 See the [DCK effect configuration guide](../../../lib/democonstructionkit/docs/EFFECT_OPTIONS.md) for the shared API and examples.

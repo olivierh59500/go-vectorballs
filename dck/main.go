@@ -42,14 +42,6 @@ var (
 	textData = originalassets.DCKAssetTextData()
 
 	musicData = originalassets.DCKAssetMusicData()
-
-	sinusPhaseSin, sinusPhaseCos = func() ([15]float64, [15]float64) {
-		var sin, cos [15]float64
-		for i := range sin {
-			sin[i], cos[i] = math.Sincos(float64(i) * math.Pi / 10)
-		}
-		return sin, cos
-	}()
 )
 
 // Vector3 represents a 3D point
@@ -182,151 +174,6 @@ func (sm *ShapeManager) GetCopy(name string) *Shape {
 // Animation interface
 type Animation interface {
 	Run(points []Vector3, frameCount int)
-}
-
-// Sinus2D animation
-type Sinus2D struct {
-	ctr    float64
-	ctrAmp float64
-}
-
-func (s *Sinus2D) Run(points []Vector3, frameCount int) {
-	amplitude := 200 * math.Sin(s.ctrAmp)
-	sinCtr, cosCtr := math.Sincos(s.ctr)
-	i := 0
-	for y := 0; y < 8; y++ {
-		for x := 0; x < 8; x++ {
-			if i < len(points) {
-				phase := x + y
-				points[i].Z = amplitude * (cosCtr*sinusPhaseCos[phase] - sinCtr*sinusPhaseSin[phase])
-			}
-			i++
-		}
-	}
-	s.ctr += math.Pi / 55
-	s.ctrAmp += math.Pi / 60
-}
-
-// YRotate animation
-type YRotate struct {
-	ctr   float64
-	ratio float64
-	incr  float64
-}
-
-func NewYRotate() *YRotate {
-	return &YRotate{
-		ctr:   0,
-		ratio: 0,
-		incr:  0.025,
-	}
-}
-
-func (y *YRotate) Run(points []Vector3, frameCount int) {
-	// This animation modifies position via GetPosition()
-	y.ctr += math.Pi / 144
-	if y.incr > 0 {
-		y.ratio += y.incr
-		if y.ratio >= 1 {
-			y.incr = 0
-		}
-	} else if y.incr < 0 {
-		y.ratio += y.incr
-		if y.ratio <= 0 {
-			y.incr = 0
-		}
-	}
-}
-
-// GetPosition returns the new position for YRotate animation
-func (y *YRotate) GetPosition() Vector3 {
-	sinCtr, cosCtr := math.Sincos(y.ctr)
-	return Vector3{
-		X: y.ratio * 100 * cosCtr,
-		Y: 0,
-		Z: 850 + y.ratio*100*sinCtr,
-	}
-}
-
-// Rotors animation (for helicopter)
-type Rotors struct {
-	ctr float64
-}
-
-func (r *Rotors) Run(points []Vector3, frameCount int) {
-	if len(points) < 8 {
-		return
-	}
-
-	// DON'T apply scaleFactor here - the points are already scaled from parseShape
-	radii := [...]float64{80, 150, 210, 160}
-	offset := 100.0
-	sinCtr, cosCtr := math.Sincos(r.ctr)
-
-	for i, radius := range radii {
-		x := radius * sinCtr
-		z := radius * cosCtr
-		if i*2 < len(points) {
-			points[i*2].X = x
-			// DON'T touch Y - it's already set correctly from the shape
-			points[i*2].Z = z - offset
-		}
-		if i*2+1 < len(points) {
-			points[i*2+1].X = -x
-			// DON'T touch Y - it's already set correctly from the shape
-			points[i*2+1].Z = -z - offset
-		}
-	}
-	r.ctr += 0.08
-}
-
-// Bounce animation
-type Bounce struct {
-	curve      []float64
-	ctr        int
-	bounceOffY float64
-}
-
-func NewBounce() *Bounce {
-	curve := make([]float64, 0, 540)
-	rad := 1200.0
-	off := 210.0
-
-	formula := func(a float64) {
-		curve = append(curve, -(off-rad*math.Cos(a*math.Pi/180))/3)
-		rad -= 5.7143 / frameRateConversion
-		off -= 1 / frameRateConversion
-	}
-
-	for c := 1; c < 4; c++ {
-		for a := 0.0; a < 90; a += 3 / frameRateConversion {
-			formula(a)
-		}
-		for a := 89.0; a >= 0; a -= 3 / frameRateConversion {
-			formula(a)
-		}
-	}
-	for a := 0.0; a < 90; a++ {
-		formula(a)
-	}
-
-	return &Bounce{curve: curve, ctr: 0, bounceOffY: 0}
-}
-
-func (b *Bounce) Run(points []Vector3, frameCount int) {
-	// Update bounce offset - this will be applied to position.Y
-	if b.ctr < len(b.curve) {
-		b.bounceOffY = b.curve[b.ctr]
-	}
-	b.ctr++
-	if b.ctr >= len(b.curve) {
-		b.ctr = 0
-	}
-}
-
-// GetBounceY returns the current bounce Y position (not offset!)
-func (b *Bounce) GetBounceY() float64 {
-	return b.bounceOffY
 }
 
 // Action represents a timeline action
@@ -727,11 +574,11 @@ func (g *Game) nextAction() {
 		for _, animType := range action.AnimTypes {
 			switch animType {
 			case "Sinus2D":
-				g.animations = append(g.animations, &Sinus2D{})
+				g.animations = append(g.animations, NewSinus2D())
 			case "YRotate":
 				g.animations = append(g.animations, NewYRotate())
 			case "Rotors":
-				g.animations = append(g.animations, &Rotors{})
+				g.animations = append(g.animations, NewRotors())
 			case "Bounce":
 				g.animations = append(g.animations, NewBounce())
 			case "MorphingSphere":
