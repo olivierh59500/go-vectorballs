@@ -19,8 +19,11 @@ func TestAuthoredPointSequenceKeepsEveryStageBoundary(t *testing.T) {
 	}
 	first := sequence.State()
 	firstXYZ := first.Points.XYZ(0)
+	wantAngle := 30 * (math.Pi / 180)
 	if first.Points.Len() != 64 || first.Position != (geometry.Vec3{Y: 320, Z: 850}) ||
-		first.Rotation != (geometry.Vec3{X: 30 * (math.Pi / 180), Y: 30 * (math.Pi / 180), Z: 30 * (math.Pi / 180)}) ||
+		math.Abs(first.Rotation.X-wantAngle) > 1e-15 ||
+		math.Abs(first.Rotation.Y-wantAngle) > 1e-15 ||
+		math.Abs(first.Rotation.Z-wantAngle) > 1e-15 ||
 		first.TextIndex != 0 || sequence.AnimationCount() != 0 {
 		t.Fatalf("first authored stage = %+v", first)
 	}
