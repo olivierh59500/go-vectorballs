@@ -163,10 +163,10 @@ func (g *Game) loadImages() {
 	}
 }
 
-// extractBalls creates all ball sprite variations
-func (g *Game) extractBalls() {
+// extractBalls uploads one palette atlas after the Ebitengine context starts.
+func (g *Game) extractBalls() error {
 	if g.ballsSource == nil {
-		return
+		return nil
 	}
 
 	// Color palettes (RGB values 0-255)
@@ -189,72 +189,27 @@ func (g *Game) extractBalls() {
 	}
 
 	sizes := [...]int{12, 16, 20, 24, 28, 32, 54}
-	atlasWidth := 0
-	for _, size := range sizes {
-		atlasWidth += size
+	frames := make([]image.Rectangle, len(sizes))
+	for index, sourceY := 0, 0; index < len(sizes); index++ {
+		size := sizes[index]
+		frames[index] = image.Rect(0, sourceY, size, sourceY+size)
+		sourceY += size
 	}
-	const rowHeight = 54
-	atlas := image.NewRGBA(image.Rect(0, 0, atlasWidth, (len(palettes)+1)*rowHeight))
-
-	for paletteIndex, palette := range palettes {
-		sourceY := 0
-		destinationX := 0
-		for _, size := range sizes {
-			sourceRect := image.Rect(0, sourceY, size, sourceY+size)
-			destination := image.Pt(destinationX, paletteIndex*rowHeight)
-			recolorBall(atlas, destination, g.ballsSource, sourceRect, palette)
-			sourceY += size
-			destinationX += size
-		}
+	atlas, err := sprites.BuildPaletteAtlas(sprites.PaletteAtlasConfig{
+		Source: g.ballsSource, Frames: frames, Palettes: palettes,
+		Index: func(pixel color.Color) int {
+			red, _, _, _ := pixel.RGBA()
+			return int(uint8(red>>8)>>5) - 3
+		},
+		RowHeight: 54, RepeatLast: true,
+		OriginalFrames: []image.Rectangle{image.Rect(0, 186, 54, 240)},
+	})
+	if err != nil {
+		return err
 	}
-
-	checkedSource := image.Rect(0, 186, 54, 240)
-	checkedDestination := image.Pt(0, len(palettes)*rowHeight)
-	copyImage(atlas, checkedDestination, g.ballsSource, checkedSource)
-
-	g.ballsAtlas = ebiten.NewImageFromImage(atlas)
-	g.balls = make([]*ebiten.Image, 0, len(palettes)*(len(sizes)+1)+1)
-	for paletteIndex := range palettes {
-		x := 0
-		for _, size := range sizes {
-			rect := image.Rect(x, paletteIndex*rowHeight, x+size, paletteIndex*rowHeight+size)
-			g.balls = append(g.balls, g.ballsAtlas.SubImage(rect).(*ebiten.Image))
-			x += size
-		}
-		// The source demo repeats the last ball of each palette.
-		g.balls = append(g.balls, g.balls[len(g.balls)-1])
-	}
-	checkedRect := image.Rect(0, len(palettes)*rowHeight, 54, (len(palettes)+1)*rowHeight)
-	g.balls = append(g.balls, g.ballsAtlas.SubImage(checkedRect).(*ebiten.Image))
+	g.ballsAtlas, g.balls = atlas.Upload()
 	g.ballsSource = nil
-}
-
-// recolorBall writes a recolored sprite into a CPU-side atlas. Keeping this
-// work off ebiten.Image avoids synchronous GPU readbacks during startup.
-func recolorBall(dst *image.RGBA, destination image.Point, src image.Image, source image.Rectangle, palette []color.RGBA) {
-	for y := 0; y < source.Dy(); y++ {
-		for x := 0; x < source.Dx(); x++ {
-			c := src.At(source.Min.X+x, source.Min.Y+y)
-			r, _, _, a := c.RGBA()
-			if a > 0 {
-				redVal := uint8(r >> 8)
-				index := int(redVal>>5) - 3
-				if index >= 0 && index < len(palette) {
-					dst.Set(destination.X+x, destination.Y+y, palette[index])
-				} else {
-					dst.Set(destination.X+x, destination.Y+y, c)
-				}
-			}
-		}
-	}
-}
-
-func copyImage(dst *image.RGBA, destination image.Point, src image.Image, source image.Rectangle) {
-	for y := 0; y < source.Dy(); y++ {
-		for x := 0; x < source.Dx(); x++ {
-			dst.Set(destination.X+x, destination.Y+y, src.At(source.Min.X+x, source.Min.Y+y))
-		}
-	}
+	return nil
 }
 
 // initAudio opens the soundtrack and starts audio output.
@@ -286,7 +241,9 @@ func (g *Game) Update() error {
 
 	// Extract balls on first frame (after game starts)
 	if !g.ballsExtracted {
-		g.extractBalls()
+		if err := g.extractBalls(); err != nil {
+			return err
+		}
 		g.ballsExtracted = true
 	}
 
@@ -405,6 +362,11 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 // Cleanup releases resources
 func (g *Game) Cleanup() {
+	if g.ballsAtlas != nil {
+		g.ballsAtlas.Deallocate()
+		g.ballsAtlas = nil
+		g.balls = nil
+	}
 	if g.waterReflection != nil {
 		_ = g.waterReflection.Close()
 	}

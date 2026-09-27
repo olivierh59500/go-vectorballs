@@ -49,6 +49,16 @@ demo no longer converts the optional object's points between two local slice
 types on each frame. The authored action script below remains a separate DCK
 `geometry.PointSequence` and keeps its original timing.
 
+The fifteen ball palettes and seven unequal sprite sizes now pass through
+`sprites.BuildPaletteAtlas`. DCK recolors and packs the images on the CPU,
+duplicates the authored last-frame crop without copying pixels and uploads one
+GPU sheet. Fifty-five complete captures before and after this change, through
+frame 659 and including the reflection, are byte-identical. Palette colors,
+source crops and their order remain editable production data.
+The updated DCK APK was installed on Pixel 10a and its 144-ball sphere was
+visually checked. Twelve sampled windows produced 744 distinct present
+intervals: p95 16.773 ms, maximum 16.897 ms and none above 20 ms.
+
 The current DCK APK was installed on a Pixel 10a (Android 17/API 37). Its
 authored default sequence produced 744 distinct presented-frame intervals:
 p95 16.780 ms, maximum 17.072 ms, none above 20 ms. Process PSS was
@@ -56,8 +66,7 @@ p95 16.780 ms, maximum 17.072 ms, none above 20 ms. Process PSS was
 remained 0. The Android window now sets `FLAG_KEEP_SCREEN_ON`; the Pixel stayed
 awake during this unattended sample. Cube, pyramid, plane and flag retain
 their exact desktop comparisons. The new sphere has five GPU captures,
-including its reflection; none of these optional modes has yet been selected
-in the Android application.
+including its reflection.
 After this sphere addition, the updated APK's authored sequence had another
 744 presented-frame intervals: p95 16.776 ms, maximum 16.961 ms and none above
 20 ms. Android still reports `KEEP_SCREEN_ON` for the foreground window.
