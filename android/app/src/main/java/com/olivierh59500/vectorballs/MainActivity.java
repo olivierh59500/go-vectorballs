@@ -3,10 +3,13 @@ package com.olivierh59500.vectorballs;
 import android.app.Activity;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+
+import java.lang.reflect.Method;
 
 import com.olivierh59500.vectorballsmobile.EbitenView;
 
@@ -20,11 +23,41 @@ public final class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         Seq.setContext(getApplicationContext());
+        configureDCKPreview();
         // Keep the demo visible during unattended playback.
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         gameView = new EbitenView(this);
         setContentView(gameView);
         hideSystemBars();
+    }
+
+    private void configureDCKPreview() {
+        if (!getIntent().hasExtra("dck_object")) {
+            return;
+        }
+        String name = getIntent().getStringExtra("dck_object");
+        String fill = getIntent().getStringExtra("dck_fill");
+        if (name == null) {
+            name = "";
+        }
+        if (fill == null) {
+            fill = "edges";
+        }
+        try {
+            // The preserved original binding has no optional DCK preset API.
+            Class<?> binding = Class.forName("com.olivierh59500.vectorballsmobile.Vectorballsmobile");
+            Method configure = binding.getMethod("configurePreview", String.class, String.class,
+                    long.class, double.class, long.class);
+            String error = (String) configure.invoke(null, name, fill,
+                    (long) getIntent().getIntExtra("dck_segments", 6),
+                    getIntent().getDoubleExtra("dck_size", 640.0),
+                    (long) getIntent().getIntExtra("dck_ball", -1));
+            if (error != null && !error.isEmpty()) {
+                Log.w("Vectorballs", "Ignoring invalid DCK preview: " + error);
+            }
+        } catch (ReflectiveOperationException error) {
+            Log.w("Vectorballs", "DCK preview is unavailable in this build", error);
+        }
     }
 
     private void hideSystemBars() {
