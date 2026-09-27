@@ -55,7 +55,6 @@ func NewShapeManager() *ShapeManager { return scene.NewShapeManager() }
 type Game struct {
 	object          *sprites.ProjectedObject
 	sharedProjector sprites.Projector
-	sharedPoints    []sprites.Point
 	// Images
 	ballsSource image.Image
 	ballsAtlas  *ebiten.Image
@@ -299,16 +298,8 @@ func (g *Game) draw3D() {
 	if g.currentShape == nil || len(g.currentShape.Points) == 0 {
 		return
 	}
-	if cap(g.sharedPoints) < len(g.currentShape.Points) {
-		g.sharedPoints = make([]sprites.Point, len(g.currentShape.Points))
-	} else {
-		g.sharedPoints = g.sharedPoints[:len(g.currentShape.Points)]
-	}
-	for i, p := range g.currentShape.Points {
-		g.sharedPoints[i] = sprites.Point{X: p.X, Y: p.Y, Z: p.Z, Image: p.Img}
-	}
 	angles := geometry.Vec3{X: g.rotation.X, Y: g.rotation.Y, Z: g.rotation.Z}
-	g.sharedProjector.Draw(g.playgroundCanvas, g.sharedPoints, g.balls, sprites.Projection{Matrix: [9]float64(geometry.RotateXYZScaled(angles, g.zoomFactor)), Translate: sprites.Point{X: g.position.X, Y: g.position.Y, Z: g.position.Z}, Focal: g.fov, CenterX: g.centerX, CenterY: g.centerY, YUp: true, AscendingDepth: true})
+	g.sharedProjector.DrawIndexed(g.playgroundCanvas, g.currentShape, g.balls, sprites.Projection{Matrix: [9]float64(geometry.RotateXYZScaled(angles, g.zoomFactor)), Translate: sprites.Point{X: g.position.X, Y: g.position.Y, Z: g.position.Z}, Focal: g.fov, CenterX: g.centerX, CenterY: g.centerY, YUp: true, AscendingDepth: true})
 }
 
 // drawBlueLines draws the horizontal blue separator lines

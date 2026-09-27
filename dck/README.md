@@ -93,6 +93,15 @@ removing the trigonometric matrix builder from this production source.
 `geometry.PointSequence` now owns the full stage clock and the ordered effects.
 The production's shape table and action data live in the pure Go `dck/scene`
 package; `go test ./dck/scene` checks a complete action cycle without a GPU.
+The authored shapes also expose their ball image index to
+`sprites.Projector.DrawIndexed`, so projection reads their animated coordinates
+directly without copying the point array each frame. Eleven complete GPU
+captures before and after this change, through frame 4,800, are byte-identical;
+run the opt-in check with `go test -tags dck_authored_rendercheck ./dck`.
+The APK with direct projection was installed on Pixel 10a. The authored
+sequence and the inspected 144-ball sphere each yielded 744 distinct present
+intervals, with p95 16.765/16.795 ms and maxima 17.022/17.051 ms respectively;
+neither had an interval above 20 ms.
 The DCK game keeps artwork, audio, projection, reflection and layer placement.
 The independent state comparison in that test now checks two complete cycles
 at every logical tick, including all model coordinates and ball indices.

@@ -109,6 +109,7 @@ func (s *Shape) XYZ(index int) geometry.Vec3 {
 	p := s.Points[index]
 	return geometry.Vec3{X: p.X, Y: p.Y, Z: p.Z}
 }
+func (s *Shape) ImageIndex(index int) int { return s.Points[index].Img }
 func (s *Shape) SetXYZ(index int, p geometry.Vec3) {
 	point := &s.Points[index]
 	point.X, point.Y, point.Z = p.X, p.Y, p.Z
