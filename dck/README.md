@@ -102,6 +102,14 @@ The APK with direct projection was installed on Pixel 10a. The authored
 sequence and the inspected 144-ball sphere each yielded 744 distinct present
 intervals, with p95 16.765/16.795 ms and maxima 17.022/17.051 ms respectively;
 neither had an interval above 20 ms.
+The remaining built-in objects were then opened through the Android preview
+extras and visually inspected with their reflections. On Pixel 10a, the cube
+(edges, six segments), pyramid (surface, six), plane (six) and flag (twelve)
+yielded 822, 808, 806 and 790 distinct presentation intervals respectively.
+Their p95 values were 16.736, 16.730, 16.745 and 16.733 ms; none exceeded
+20 ms, and thermal status stayed 0. These runs cover about 13 seconds per
+object, not battery life or peak memory. A six-segment flag leaves its balls
+more distinct than the denser twelve-segment fabric, and both remain editable.
 The DCK game keeps artwork, audio, projection, reflection and layer placement.
 The independent state comparison in that test now checks two complete cycles
 at every logical tick, including all model coordinates and ball indices.
