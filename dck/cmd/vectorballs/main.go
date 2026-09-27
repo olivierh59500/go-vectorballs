@@ -14,7 +14,7 @@ func main() {
 	fill := flag.String("fill", "edges", "cube/pyramid filling: edges, surface or solid")
 	segments := flag.Int("segments", 6, "edge subdivisions or sphere density (4*n*n balls)")
 	size := flag.Float64("size", 640, "object size in model units")
-	ball := flag.Int("ball", 120, "ball sprite index")
+	ball := flag.Int("ball", -1, "ball sprite index (-1 selects a density-aware default)")
 	flag.Parse()
 	ebiten.SetWindowSize(640, 480)
 	ebiten.SetWindowTitle("Red Sector Vectorballs Demo by TLB (ported in golang by bilizir from DMA)")

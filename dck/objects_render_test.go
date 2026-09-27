@@ -22,13 +22,17 @@ var objectCases = []ObjectOptions{
 	{Name: "plane", Segments: 8, Image: 120, Size: 640},
 	{Name: "flag", Segments: 12, Image: 120, Size: 640},
 	{Name: "sphere", Segments: 6, Image: 120, Size: 640},
+	{Name: "sphere", Segments: 6, Image: -1, Size: 640},
+	{Name: "sphere", Segments: 12, Image: -1, Size: 640},
+	{Name: "sphere", Segments: 32, Image: -1, Size: 640},
 }
 
 // Capture each object before and after its switch, plus a mid-stage frame.
 var objectCaptureFrames = []int{0, 1, 29, 30, 59, 60, 61, 89, 90, 119, 120, 121,
 	149, 150, 179, 180, 181, 209, 210, 239, 240, 241, 269, 270,
 	299, 300, 301, 329, 330, 359, 360, 361, 389, 390, 419, 420,
-	421, 449, 450, 479}
+	421, 449, 450, 479, 480, 481, 509, 510, 539,
+	540, 541, 569, 570, 599, 600, 601, 629, 630, 659}
 
 type objectCheck struct {
 	*Game
