@@ -117,3 +117,9 @@ at every logical tick, including all model coordinates and ball indices.
 compares controller CPU time and allocations without rendering.
 
 See the [DCK effect configuration guide](../../../lib/democonstructionkit/docs/EFFECT_OPTIONS.md) for the shared API and examples.
+
+The optional objects use DCK 1.0.13 and now draw larger, farther Z first for
+their `Focal/(Focal+Z)` camera. Near balls cover far balls at crossings, making
+the cube's perspective readable. The original action script keeps its authored
+projection and sorting convention. Object geometry, materials and reflection
+remain configurable.
