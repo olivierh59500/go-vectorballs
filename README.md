@@ -2,6 +2,25 @@
 
 Port Go/Ebitengine de la démo Vectorballs de Red Sector.
 
+<!-- Project showcase -->
+## Screenshots
+
+[![A rotating sphere built from colored balls beneath the scrolling message](docs/media/screenshot-1.png)](docs/media/screenshot-1.png)
+
+A rotating sphere built from colored balls beneath the scrolling message.
+
+## Video
+
+[![Animated preview of Vectorballs](docs/media/preview.gif)](https://github.com/olivierh59500/go-vectorballs/raw/refs/heads/main/docs/media/preview.mp4)
+
+**[Watch or download the 24-second MP4 preview with sound](https://github.com/olivierh59500/go-vectorballs/raw/refs/heads/main/docs/media/preview.mp4)**
+
+This preview is captured from the Go production.
+
+The animated image is silent; the MP4 includes the soundtrack.
+
+<!-- End project showcase -->
+
 ## Desktop
 
 Prérequis : Go 1.25 ou plus récent.
