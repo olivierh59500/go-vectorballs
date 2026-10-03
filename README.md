@@ -5,9 +5,17 @@ Port Go/Ebitengine de la démo Vectorballs de Red Sector.
 <!-- Project showcase -->
 ## Screenshots
 
-[![A rotating sphere built from colored balls beneath the scrolling message](docs/media/screenshot-1.png)](docs/media/screenshot-1.png)
+[![Vector-ball sphere and its water reflection](docs/media/screenshot-1.png)](docs/media/screenshot-1.png)
 
-A rotating sphere built from colored balls beneath the scrolling message.
+Vector-ball sphere and its water reflection.
+
+[![Animated vector-ball helicopter](docs/media/screenshot-2.png)](docs/media/screenshot-2.png)
+
+Animated vector-ball helicopter.
+
+[![Human figure built from vector balls](docs/media/screenshot-3.png)](docs/media/screenshot-3.png)
+
+Human figure built from vector balls.
 
 ## Video
 
@@ -15,7 +23,7 @@ A rotating sphere built from colored balls beneath the scrolling message.
 
 **[Watch or download the 24-second MP4 preview with sound](https://github.com/olivierh59500/go-vectorballs/raw/refs/heads/main/docs/media/preview.mp4)**
 
-This preview is captured from the Go production.
+This short showcase combines selected passages from the Go production.
 
 The animated image is silent; the MP4 includes the soundtrack.
 
